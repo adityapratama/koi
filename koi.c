@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #define KOI_VERSION "0.0.1"
+#define KOI_TAB_STOP 8
 
 #define CTRL_KEY(k) ((k) & 0x1f)
 
@@ -57,7 +58,9 @@ void abFree(struct abuf *ab) {
 /*** data ***/
 typedef struct erow {
   int size;
+  int rsize;
   char *chars;
+  char *render;
 } erow;
 
 struct editorConfig {
@@ -121,12 +124,12 @@ void editorDrawRows(struct abuf *b) {
         abAppend(b, "~", 1);
       }
     } else {
-      int len = E.row[filerow].size - E.coloffset;
+      int len = E.row[filerow].rsize - E.coloffset;
       if (len < 0) len = 0;
       if (len > E.screencols)
         len = E.screencols;
 
-      abAppend(b, &E.row[filerow].chars[E.coloffset], len);
+      abAppend(b, &E.row[filerow].render[E.coloffset], len);
     }
 
     /* K command = Hapus setiap line. Digunankan untuk refresh line sebelum ditulis lagi.
@@ -417,6 +420,33 @@ int getWindowSize(int *rows, int *cols) {
   }
 }
 
+void editorUpdateRow(erow *row) {
+  int tabs = 0;
+  int j;
+  /* untuk menghitung alokasi memory jika tab diganti dengan multiple space */
+  for (j=0; j<E.row->size; j++)
+    if (row->chars[j] == '\t') tabs++;
+
+  free(row->render);
+  /* dikali KOI_TAB_STOP-1, karena ingin mengubah karakter tab dengan space
+   * 1 tab = 1 karakter, jika 1 tab = 8 karakter space maka setiap tab harus ditambah 7
+   * karena 1 karakter lagi sudah menggukanan 1 alokasi memory dr tab */
+  row->render = malloc(row->size + tabs*(KOI_TAB_STOP-1) + 1);
+
+  int idx = 0;
+  for (j=0; j<row->size; j++) {
+    if (row->chars[j] == '\t') {
+      row->render[idx++] = ' ';
+      while (idx % KOI_TAB_STOP != 0) row->render[idx++] = ' ';
+    } else {
+      row->render[idx++] = row->chars[j];
+    }
+  }
+  
+  row->render[idx] = '\0';
+  row->rsize = idx;
+}
+
 void editorAppendRow(char *line, size_t len) {
   E.row = realloc(E.row, sizeof(erow) * (E.numrows + 1));
 
@@ -426,6 +456,10 @@ void editorAppendRow(char *line, size_t len) {
   memcpy(E.row[at].chars, line, len);
   E.row[at].chars[len] = '\0';
   E.numrows++;
+
+  E.row[at].rsize = 0;
+  E.row[at].render = NULL;
+  editorUpdateRow(&E.row[at]);
 }
 
 /*** file i/o ***/
