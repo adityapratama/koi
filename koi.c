@@ -64,7 +64,9 @@ typedef struct erow {
 } erow;
 
 struct editorConfig {
+  /* c = cursor */
   int cx, cy;
+  /* r = render */
   int rx;
   int screenrows;
   int screencols;
@@ -434,6 +436,16 @@ int editorRowCxToRx(erow *row, int cx) {
   int j;
   for (j=0; j<cx; j++) {
     if (row->chars[j] == '\t')
+      /* \t      [a]bc def |
+       * ........[a]bc def | 
+       * cx = 1
+       * j=0 => rx = (0 += (8-1) - (0 % 8)) = 7
+       *
+       * \t      \t      [a]bc def |
+       * ................[a]bc def | 
+       * cx = 2
+       * j=0 => rx = (0 += (8-1) - (0 % 8)) = 7
+       * j=1 => rx = (8 += (8-1) - (8 % 8)) = 15 */
       rx += (KOI_TAB_STOP-1) - (rx % KOI_TAB_STOP);
 
     rx++;
