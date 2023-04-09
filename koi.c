@@ -77,6 +77,7 @@ struct editorConfig {
   /* coloffset: refers to what’s at the left of the screen */
   int coloffset;
   erow *row;
+  char *filename;
   struct termios orig_termios;
 };
 
@@ -150,10 +151,35 @@ void editorDrawRows(struct abuf *b) {
      *              1 hapus seluruh bagian dr line yg berada dikiri cursor
      *              2 hapus 1 line penuh */
     abAppend(b, "\x1b[K", 4);
-    if (y < E.screenrows - 1)
-      /* write(STDOUT_FILENO, "\r\n", 2); */
-      abAppend(b, "\r\n", 2);
+    /* if (y < E.screenrows - 1) */
+    /* write(STDOUT_FILENO, "\r\n", 2); */
+    abAppend(b, "\r\n", 2);
   }
+}
+
+void editorDrawStatusBar(struct abuf *ab) {
+  abAppend(ab, "\x1b[7m", 4);
+
+  char status[80], rstatus[80];
+  int len = snprintf(status, sizeof(status),
+      "%.20s - %d lines",
+      E.filename ? E.filename : "[No name]", E.numrows);
+  int rlen = snprintf(rstatus, sizeof(rstatus),
+      "%d/%d",
+      E.cy + 1, E.numrows);
+  if (len > E.screencols)
+    len = E.screencols;
+  abAppend(ab, status, len);
+  while (len < E.screencols) {
+    if (E.screencols - len == rlen) {
+      abAppend(ab, rstatus, rlen);
+      break;
+    } else {
+      abAppend(ab, " ", 1);
+      len++;
+    }
+  }
+  abAppend(ab, "\x1b[m", 3);
 }
 
 void editorRefreshScreen() {
@@ -179,6 +205,7 @@ void editorRefreshScreen() {
   abAppend(&ab, "\x1b[H", 3);
 
   editorDrawRows(&ab);
+  editorDrawStatusBar(&ab);
 
   char buf[32];
   /* snprintf(buf, sizeof(buf), "\x1b[%d;%dH", E.cy + 1, E.cx + 1); */
@@ -508,6 +535,9 @@ void editorAppendRow(char *line, size_t len) {
 
 /*** file i/o ***/
 void editorOpen(char *filename) {
+  free(E.filename);
+  E.filename = strdup(filename);
+
   FILE *file = fopen(filename, "r");
   if (!file)
     die("fopen");
@@ -537,8 +567,11 @@ void initEditor() {
   E.rowoffset = 0;
   E.coloffset = 0;
   E.row = NULL;
+  E.filename = NULL;
 
   if (getWindowSize(&E.screenrows, &E.screencols) == -1) die("getWindowSize");
+
+  E.screenrows -= 1;
 }
 
 int main(int argc, char *argv[]) {
